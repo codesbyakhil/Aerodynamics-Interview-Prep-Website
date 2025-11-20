@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Brain, ChevronRight, RotateCcw, CheckCircle, XCircle, BarChart, Plane, Wind, Activity, Menu, X, GraduationCap, Sparkles, MessageSquare, Loader2, RefreshCw, Key, Settings } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, Brain, ChevronRight, RotateCcw, CheckCircle, XCircle, BarChart, Plane, Wind, Activity, Menu, X, GraduationCap, Sparkles, MessageSquare, Loader2, RefreshCw, Key, Settings, Filter } from 'lucide-react';
 
 // --- Data & Content based on MS_Call_Letter_Jan_2026.pdf ---
 
@@ -262,26 +262,80 @@ const SyllabusView = () => (
 );
 
 const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
-  const [questions, setQuestions] = useState([...INITIAL_QUESTION_BANK]);
+  // Setup State
+  const [isSetupMode, setIsSetupMode] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // Session State
+  const [questions, setQuestions] = useState([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [completed, setCompleted] = useState([]);
   const [shuffledQuestions, setShuffledQuestions] = useState([]);
   
-  // New AI State
+  // AI State
   const [userAnswer, setUserAnswer] = useState("");
   const [aiFeedback, setAiFeedback] = useState("");
   const [aiDeepDive, setAiDeepDive] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [feedbackStatus, setFeedbackStatus] = useState(null); // 'good', 'bad', 'neutral'
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
+
+  // Get available categories from the actual question bank to avoid empty sessions
+  const availableCategories = ['All', ...new Set(INITIAL_QUESTION_BANK.map(q => q.category))];
 
   useEffect(() => {
-    // Shuffle questions only on mount
-    setShuffledQuestions([...questions].sort(() => 0.5 - Math.random()));
-  }, [questions]);
+    if (!isSetupMode && questions.length > 0) {
+      setShuffledQuestions([...questions].sort(() => 0.5 - Math.random()));
+    }
+  }, [isSetupMode, questions]);
+
+  const startSession = (category) => {
+    let filteredQuestions = [...INITIAL_QUESTION_BANK];
+    if (category !== 'All') {
+      filteredQuestions = filteredQuestions.filter(q => q.category === category);
+    }
+    // If filtered list is empty (shouldn't happen with this logic but good safety), fallback to all
+    if (filteredQuestions.length === 0) filteredQuestions = [...INITIAL_QUESTION_BANK];
+    
+    setQuestions(filteredQuestions);
+    setSelectedCategory(category);
+    setIsSetupMode(false);
+  };
+
+  // --- Setup Mode View ---
+  if (isSetupMode) {
+    return (
+      <div className="max-w-2xl mx-auto animate-fade-in py-8">
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 text-center">
+          <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Filter className="text-blue-600 w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Choose Your Focus</h2>
+          <p className="text-slate-600 mb-8">
+            Select a specific topic to drill down, or take a full mock interview with mixed topics.
+          </p>
+
+          <div className="grid gap-3 max-w-md mx-auto">
+            {availableCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => startSession(cat)}
+                className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all group text-left"
+              >
+                <span className="font-medium text-slate-700 group-hover:text-blue-800">
+                  {cat === 'All' ? 'Full Mock Interview (All Topics)' : cat}
+                </span>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const currentQ = shuffledQuestions[currentQIndex];
-  // Guard against empty state during initial render or re-shuffle
+  // Guard if processing
   if (!currentQ) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   const progress = ((currentQIndex) / shuffledQuestions.length) * 100;
@@ -340,9 +394,15 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
 
   const handleGenerateNewQuestion = async () => {
     setIsAiLoading(true);
-    const prompt = `Generate a single, challenging interview question (with a concise answer) for an Aerospace Engineering M.S. admission interview (Panel 1: Aerodynamics, Flight Dynamics & Controls). 
-    Topics: ${JSON.stringify(SYLLABUS.map(s => s.topics).flat())}.
-    Format the response strictly as JSON: {"category": "Topic Category", "question": "The question text", "answer": "The concise answer text"}.`;
+    
+    // Smart Prompt: If specific category selected, ask ONLY for that.
+    const topicScope = selectedCategory === 'All' 
+      ? JSON.stringify(SYLLABUS.map(s => s.topics).flat())
+      : selectedCategory;
+
+    const prompt = `Generate a single, challenging interview question (with a concise answer) for an Aerospace Engineering M.S. admission interview (Panel 1). 
+    Focus specifically on this topic area: ${topicScope}.
+    Format the response strictly as JSON: {"category": "${selectedCategory === 'All' ? 'Topic Category' : selectedCategory}", "question": "The question text", "answer": "The concise answer text"}.`;
 
     const responseText = await callGemini(prompt);
     setIsAiLoading(false);
@@ -408,10 +468,17 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
 
   return (
     <div className="max-w-3xl mx-auto animate-fade-in">
+      {/* Header for Session Context */}
       <div className="mb-6 flex items-center justify-between text-sm text-slate-500">
-        <span>Question {currentQIndex + 1} of {shuffledQuestions.length}</span>
+        <div className="flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedCategory === 'All' ? 'bg-slate-200 text-slate-700' : 'bg-blue-100 text-blue-800'}`}>
+                {selectedCategory === 'All' ? 'Mixed Topics' : selectedCategory}
+            </span>
+            <span>• Q{currentQIndex + 1}/{shuffledQuestions.length}</span>
+        </div>
         <span>{Math.round(progress)}% Complete</span>
       </div>
+      
       <div className="h-2 bg-slate-100 rounded-full mb-8 overflow-hidden">
         <div 
           className="h-full bg-blue-600 transition-all duration-500 ease-out"
@@ -430,7 +497,7 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
             className="flex items-center gap-1 text-purple-600 text-xs font-semibold hover:bg-purple-50 px-2 py-1 rounded transition-colors"
           >
             {isAiLoading ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12} />}
-            Generate Fresh Question
+            New {selectedCategory !== 'All' ? 'Focus' : ''} Question
           </button>
         </div>
 
@@ -558,7 +625,7 @@ const Results = ({ count, total, onReset }) => (
 // --- Main App ---
 
 export default function App() {
-  const [view, setView] = useState('home'); 
+  const [view, setView] = useState('home'); // home, syllabus, interview, results
   const [sessionCount, setSessionCount] = useState(0);
   const [apiKey, setApiKey] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
