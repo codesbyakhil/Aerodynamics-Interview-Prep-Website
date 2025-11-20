@@ -349,7 +349,7 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
 
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -364,10 +364,10 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
       if (!response.ok) throw new Error('API call failed');
       
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again.";
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
     } catch (error) {
       console.error("Gemini API Error:", error);
-      return "Sorry, I'm having trouble connecting to the AI professor right now. Please check your API key.";
+      return null;
     }
   };
 
@@ -407,7 +407,10 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
     const responseText = await callGemini(prompt);
     setIsAiLoading(false);
     
-    if (!responseText) return; // API key modal triggered
+    if (!responseText) {
+      if (apiKey) setAiFeedback("Sorry, I couldn't connect to the AI. Please check your API key in Settings.");
+      return;
+    }
 
     try {
       // Clean up markdown code blocks if present
@@ -446,7 +449,10 @@ const InterviewSession = ({ onEnd, apiKey, onRequireKey }) => {
     const response = await callGemini(prompt);
     setIsAiLoading(false);
     
-    if (!response) return;
+    if (!response) {
+       setAiFeedback("Could not connect to AI. Please check your API Key.");
+       return;
+    }
 
     setAiFeedback(response);
     
